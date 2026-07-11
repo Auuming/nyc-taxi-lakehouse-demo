@@ -12,10 +12,11 @@
 - Gold Pipeline
 - Iceberg Catalog
 - SQL Analytics
+- visualization
+
+## Future Improvement
+- add recover and checkpoint in ingested_bronze.py for distributed transaction between ingested_log and bronze_table
 - Dashboard
 - MinIO
 - Docker Compose
 - Documentation
-
-## Future Improvement
-- add recover and checkpoint in ingested_bronze.py for distributed transaction between ingested_log and bronze_table
