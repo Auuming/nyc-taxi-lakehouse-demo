@@ -141,6 +141,10 @@ def count_failures(mask: pa.ChunkedArray, rows: int) -> int:
     return rows - (pc.sum(pc.cast(mask, pa.int64())).as_py() or 0)
 
 
+def count_warnings(mask: pa.ChunkedArray) -> int:
+    return pc.sum(pc.cast(mask, pa.int64())).as_py() or 0
+
+
 def add_rejection_metadata(
     rejected: pa.Table,
     rejected_mask: pa.ChunkedArray,
@@ -191,6 +195,11 @@ def clean_batch(
         False,
     )
 
+    zero_duration_warning = pc.fill_null(
+        pc.equal(dropoff, pickup),
+        False,
+    )
+
     pickup_range_valid = pc.fill_null(
         pc.and_(
             pc.greater_equal(pickup, pa.scalar(MIN_PICKUP_DATETIME, pickup.type)),
@@ -228,6 +237,7 @@ def clean_batch(
 
     rule_counts = {
         "timestamp_order": count_failures(timestamp_order_valid, rows_read),
+        "zero_duration_warning": count_warnings(zero_duration_warning),
         "pickup_range": count_failures(pickup_range_valid, rows_read),
         "distance": count_failures(distance_valid, rows_read),
         "amounts": count_failures(amounts_valid, rows_read),
@@ -278,6 +288,7 @@ def clean_batch(
     )
 
     warning_columns = {
+        "_silver_zero_duration": zero_duration_warning,
         "_silver_zero_distance": pc.equal(batch["trip_distance"], 0.0),
         "_silver_zero_fare": pc.equal(batch["fare_amount"], 0.0),
         "_silver_zero_total": pc.equal(batch["total_amount"], 0.0),
@@ -295,9 +306,14 @@ def clean_batch(
 
     duration_us = pc.cast(pc.subtract(clean["dropoff_datetime"], clean["pickup_datetime"]), pa.int64())
     duration_min = pc.divide(pc.cast(duration_us, pa.float64()), 60_000_000.0)
-    avg_speed_mph = pc.divide(pc.multiply(clean["trip_distance"], 60.0), duration_min)
+    positive_duration = pc.greater(duration_min, 0.0)
+    avg_speed_mph = pc.if_else(
+        positive_duration,
+        pc.divide(pc.multiply(clean["trip_distance"], 60.0), duration_min),
+        pa.scalar(None, pa.float64()),
+    )
     clean = clean.append_column(pa.field("trip_duration_min", pa.float64()), duration_min)
-    clean = clean.append_column(pa.field("avg_speed_mph", pa.float64()), avg_speed_mph)
+    clean = clean.append_column(pa.field("avg_speed_mph", pa.float64(), nullable=True), avg_speed_mph)
 
     encoded_flag = pc.cast(
         pc.equal(clean["store_and_fwd_flag"], "Y"),
