@@ -1,0 +1,6 @@
+duckdb
+pandas
+plotly
+pyarrow
+pyiceberg[sql-sqlite]
+streamlit
