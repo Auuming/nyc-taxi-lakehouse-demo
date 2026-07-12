@@ -43,6 +43,27 @@ COLUMN_RENAMES = {
     "Airport_fee": "airport_fee",
 }
 
+REQUIRED_AMOUNT_COLUMNS = [
+    "fare_amount",
+    "extra",
+    "mta_tax",
+    "tip_amount",
+    "tolls_amount",
+    "improvement_surcharge",
+    "total_amount",
+    "cbd_congestion_fee",
+]
+
+OPTIONAL_AMOUNT_COLUMNS = [
+    "congestion_surcharge",
+    "airport_fee",
+]
+
+AMOUNT_COLUMNS = (
+    REQUIRED_AMOUNT_COLUMNS
+    + OPTIONAL_AMOUNT_COLUMNS
+)
+
 MIN_PICKUP_DATETIME = datetime(2025, 12, 31, 23, 0, 0)
 MAX_PICKUP_DATETIME = datetime(2026, 4, 1, 1, 0, 0)
 SOURCE_MONTH_PATTERN = re.compile(r"_(\d{4})-(\d{2})\.parquet$")
@@ -194,12 +215,10 @@ def clean_batch(
         pc.greater_equal(dropoff, pickup),
         False,
     )
-
     zero_duration_warning = pc.fill_null(
         pc.equal(dropoff, pickup),
         False,
     )
-
     pickup_range_valid = pc.fill_null(
         pc.and_(
             pc.greater_equal(pickup, pa.scalar(MIN_PICKUP_DATETIME, pickup.type)),
@@ -207,7 +226,6 @@ def clean_batch(
         ),
         False,
     )
-
     timestamps_valid = pc.and_(
         timestamp_order_valid,
         pickup_range_valid,
@@ -220,15 +238,25 @@ def clean_batch(
         False,
     )
 
-    fare_nonnegative = pc.fill_null(
-        pc.greater_equal(batch["fare_amount"], 0.0),
-        False,
+    amount_rule_counts = {}
+    amounts_valid = pa.chunked_array(
+        [
+            pa.repeat(pa.scalar(True, pa.bool_()), rows_read)
+        ]
     )
-    total_nonnegative = pc.fill_null(
-        pc.greater_equal(batch["total_amount"], 0.0),
-        False,
-    )
-    amounts_valid = pc.and_(fare_nonnegative, total_nonnegative)
+    for column in AMOUNT_COLUMNS:
+        column_valid = pc.fill_null(
+            pc.greater_equal(batch[column], 0.0),
+            True if column in OPTIONAL_AMOUNT_COLUMNS else False,
+        )
+        amount_rule_counts[column] = count_failures(
+            column_valid,
+            rows_read,
+        )
+        amounts_valid = pc.and_(
+            amounts_valid,
+            column_valid,
+        )
 
     passengers_valid = pc.fill_null(
         pc.greater(batch["passenger_count"], 0),
@@ -242,6 +270,10 @@ def clean_batch(
         "distance": count_failures(distance_valid, rows_read),
         "amounts": count_failures(amounts_valid, rows_read),
         "passengers": count_failures(passengers_valid, rows_read),
+        **{
+            f"invalid_{column}": count
+            for column, count in amount_rule_counts.items()
+        },
     }
 
     valid_mask = pc.and_(
