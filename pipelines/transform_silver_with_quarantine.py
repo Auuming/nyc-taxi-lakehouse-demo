@@ -146,12 +146,14 @@ def add_rejection_metadata(
     rejected_mask: pa.ChunkedArray,
     *,
     timestamps_valid: pa.ChunkedArray,
+    source_month_valid: pa.ChunkedArray,
     distance_valid: pa.ChunkedArray,
     amounts_valid: pa.ChunkedArray,
     passengers_valid: pa.ChunkedArray,
 ) -> pa.Table:
     rejection_columns = {
         "_invalid_timestamp": timestamps_valid,
+        "_invalid_source_month": source_month_valid,
         "_invalid_distance": distance_valid,
         "_invalid_amount": amounts_valid,
         "_invalid_passenger_count": passengers_valid,
@@ -248,6 +250,7 @@ def clean_batch(
         rejected,
         rejected_mask,
         timestamps_valid=timestamps_valid,
+        source_month_valid=source_month_valid,
         distance_valid=distance_valid,
         amounts_valid=amounts_valid,
         passengers_valid=passengers_valid,
