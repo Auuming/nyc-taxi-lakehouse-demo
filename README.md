@@ -89,6 +89,8 @@ dashboard/
 sql/
 
 notebooks/
+
+scripts/
 ```
 
 ---
@@ -265,7 +267,7 @@ pip install -r requirements.txt
 
 ---
 
-## 2.1 Run everything (recommended)
+## 2.1 Run everything
 
 Downloads the configured NYC Taxi datasets, builds the Bronze, Silver, and Gold layers, then launches the Streamlit dashboard.
 
@@ -312,24 +314,6 @@ python pipelines/build_gold.py
 ```bash
 streamlit run dashboard/app.py
 ```
-
----
-
-# Engineering Highlights
-
-This project intentionally keeps engineering metrics alongside business metrics.
-
-Examples include
-
-- pipeline funnel
-- quarantine analysis
-- payment type 0 profiling
-- month-offset lineage
-- rejection reasons
-- warning metrics
-- four zero-value analytical variants
-
-These insights demonstrate how raw datasets are investigated rather than blindly aggregated.
 
 ---
 
