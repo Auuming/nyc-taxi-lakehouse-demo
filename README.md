@@ -336,7 +336,6 @@ streamlit run dashboard/app.py
 - [x] SQL analytics
 - [x] Streamlit dashboard
 - [x] Data-quality dashboard
-- [x] Documentation
 
 ---
 
@@ -365,6 +364,7 @@ streamlit run dashboard/app.py
 
 ## Future Ideas
 
+- Documentation
 - PySpark pipelines
 - Apache Spark SQL
 - Apache Nessie
