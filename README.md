@@ -8,14 +8,15 @@
 ## Checkbox
 - Download Dataset
 - ~~Bronze Pipeline~~
-- Silver Pipeline
+- ~~Silver Pipeline~~
 - Gold Pipeline
 - Iceberg Catalog
 - SQL Analytics
 - visualization
 
 ## Future Improvement
-- add recover and checkpoint in ingested_bronze.py for distributed transaction between ingested_log and bronze_table
+- add recover and checkpoint in pipeline for distributed transaction between log and table
+- review fare validation rules and improve Silver-layer data cleaning logic.
 - Dashboard
 - MinIO
 - Docker Compose
