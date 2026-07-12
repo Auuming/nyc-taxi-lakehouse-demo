@@ -257,23 +257,57 @@ payment_null_profile.sql
 
 # Running
 
-Install
+## 1. Install dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-Run pipelines
+---
+
+## 2.1 Run everything (recommended)
+
+Downloads the configured NYC Taxi datasets, builds the Bronze, Silver, and Gold layers, then launches the Streamlit dashboard.
+
+```bash
+python scripts/run_all.py
+```
+
+To skip launching the dashboard:
+
+```bash
+python scripts/run_all.py --no-dashboard
+```
+
+---
+
+## 2.2 Run each step manually
+
+### Download datasets
+
+```bash
+python scripts/download_dataset.py
+```
+
+### Build Bronze
 
 ```bash
 python pipelines/ingest_bronze.py
+```
 
+### Build Silver
+
+```bash
 python pipelines/transform_silver_with_quarantine.py
+```
 
+### Build Gold
+
+```bash
 python pipelines/build_gold.py
 ```
 
-Open dashboard
+### Launch dashboard
 
 ```bash
 streamlit run dashboard/app.py
