@@ -113,12 +113,14 @@ scripts/
 
 ## Bronze
 
+### Features
+
 - Reads raw NYC Taxi Parquet files
 - Preserves original schema
 - Stores ingestion metadata
 - Fully idempotent
 
-Output
+### Output
 
 ```
 bronze.yellow_trips
@@ -130,18 +132,19 @@ bronze.yellow_trips
 
 Cleans and validates Bronze data.
 
-Features
+### Features
 
-- schema normalization
-- timestamp validation
-- amount validation
-- quarantine table
-- data quality flags
-- month-offset lineage
+- Schema normalization
+- Timestamp validation
+- Monetary amount validation
+- Data quality flags
+- Quarantine invalid records
+- Source month-offset lineage tracking
+- Partitioned by pickup month for efficient analytical queries
 
-Outputs
+### Outputs
 
-```
+```text
 silver.yellow_trips
 quarantine.yellow_trips_rejected
 ```
@@ -152,6 +155,7 @@ quarantine.yellow_trips_rejected
 
 Produces analytical tables for BI and dashboards.
 
+### Feature
 Current Gold layer includes
 
 - Daily KPI
@@ -164,6 +168,7 @@ Current Gold layer includes
 - Payment null profile
 - Data quality summary
 
+### Outputs
 All Gold tables are rebuilt from Silver on every execution.
 
 ---
