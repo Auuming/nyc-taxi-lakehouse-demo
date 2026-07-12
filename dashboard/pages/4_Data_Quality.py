@@ -12,7 +12,7 @@ from charts import pipeline_funnel, quality_bar
 from data import MONTH_BASIS_LABELS, load_gold_table, month_basis_selector, require_nonempty
 
 
-st.set_page_config(page_title="Data Quality", page_icon="🧪", layout="wide")
+st.set_page_config(page_title="Data Quality", layout="wide")
 st.title("Data Quality and Engineering Insights")
 
 quality = load_gold_table("gold.data_quality_summary")

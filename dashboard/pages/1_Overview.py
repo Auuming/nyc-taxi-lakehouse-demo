@@ -17,7 +17,7 @@ from data import (
 )
 
 
-st.set_page_config(page_title="Overview", page_icon="📈", layout="wide")
+st.set_page_config(page_title="Overview", layout="wide")
 st.title("Business Overview")
 
 variant = variant_selector(key="overview_variant")

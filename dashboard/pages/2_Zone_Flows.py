@@ -18,7 +18,7 @@ from data import (
 )
 
 
-st.set_page_config(page_title="Zone Flows", page_icon="🗺️", layout="wide")
+st.set_page_config(page_title="Zone Flows", layout="wide")
 st.title("Pickup and Drop-off Zone Flows")
 st.caption(
     "Location IDs are categorical Taxi Zone identifiers. "

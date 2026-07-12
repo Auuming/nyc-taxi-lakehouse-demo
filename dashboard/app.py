@@ -5,7 +5,6 @@ from data import clear_dashboard_cache
 
 st.set_page_config(
     page_title="NYC Taxi Lakehouse",
-    page_icon="🚕",
     layout="wide",
 )
 

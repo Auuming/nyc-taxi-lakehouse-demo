@@ -18,7 +18,7 @@ from data import (
 )
 
 
-st.set_page_config(page_title="Payment and Vendor", page_icon="💳", layout="wide")
+st.set_page_config(page_title="Payment and Vendor", layout="wide")
 st.title("Payment and Vendor Analysis")
 
 variant = variant_selector(key="payment_vendor_variant")
