@@ -31,7 +31,7 @@ During development, several interesting characteristics of the NYC Yellow Taxi d
 
 - **1.17% of records are quarantined** because they violate data-quality rules, including negative monetary values, invalid passenger counts, timestamp inconsistencies, or pickups outside the project's accepted date range.
 
-- **The dataset contains thousands of anomalous but potentially valid trips**, including zero-distance trips, zero-duration trips, zero fares, zero total amounts, and trips where `total_amount < fare_amount`. Since the TLC documentation does not clearly define these cases as invalid, the pipeline retains them in Silver with warning flags and provides four Gold data variants so their impact on business metrics can be compared.
+- **The dataset contains thousands of anomalous but potentially valid trips**, including zero-distance trips, zero-duration trips, zero fares, zero total amounts, and trips where `total_amount < fare_amount`. These records suggest that individual fields may contain recording errors while the remaining attributes are still usable, making it difficult to determine whether the entire record should be discarded. Because the TLC documentation does not explicitly classify these cases as invalid, the pipeline keeps them in Silver with warning flags and exposes four Gold data variants so their impact on downstream analytics can be evaluated.
 
 ---
 
