@@ -1,43 +1,359 @@
 # NYC Taxi Lakehouse Demo
 
-A minimal local data lakehouse built with NYC Yellow Taxi trip data,
-Apache Iceberg, PyArrow, PyIceberg, and SQL analytics.
+A minimal end-to-end data lakehouse built with **NYC Yellow Taxi** data using **Apache Iceberg**, **PyArrow**, **PyIceberg**, **DuckDB**, and **Streamlit**.
 
-## Project Phases
+This is a personal learning project built to understand modern data lakehouse architecture from end to end. It demonstrates how raw data is ingested, validated, transformed into Bronze, Silver, and Gold layers, and exposed through SQL analytics and interactive dashboards using open-source technologies.
 
-### Phase 1 — Minimal Lakehouse
+---
 
-Build a complete end-to-end lakehouse using three months of
-NYC Yellow Taxi data.
+## Features
 
-- [x] Download Yellow Taxi datasets
-- [x] Build Bronze ingestion pipeline
-- [x] Build Silver cleaning and quarantine pipeline
-- [ ] Build Gold aggregation pipeline
-- [x] Configure local Iceberg catalog
-- [ ] Add SQL analytics queries
-- [ ] Add a simple visualization
-- [ ] Complete README and architecture documentation
+- End-to-end Bronze → Silver → Gold pipeline
+- Apache Iceberg table format
+- Local Iceberg catalog
+- Data-quality validation and quarantine layer
+- Business analytics Gold tables
+- DuckDB SQL analytics
+- Interactive Streamlit dashboard
+- Engineering insight dashboard
+- Idempotent pipelines
+- Metadata logging
 
-### Phase 2 — Reliability and Infrastructure
+---
 
-Improve pipeline reliability, deployment, and query performance.
+## Interesting Findings
 
-- [ ] Add recovery and checkpoint handling for partial pipeline writes
-- [ ] Improve idempotency between Iceberg table writes and pipeline logs
-- [ ] Review fare validation rules
-- [ ] Improve Silver data-quality rules
-- [ ] Add query-performance experiments
-- [ ] Add a dashboard
-- [ ] Add MinIO object storage
-- [ ] Add Docker Compose
+During development, several interesting characteristics of the NYC Yellow Taxi dataset were discovered and incorporated into the pipeline.
 
-### Phase 3 — Multi-Service Taxi Lakehouse
+- **27.92% of trips use `payment_type = 0 (Flex Fare trip)`**, and every one of these records has `passenger_count`, `RatecodeID`, `airport_fee`, `congestion_surcharge`, and `store_and_fwd_flag` set to `NULL`. Rather than treating these rows as corrupted, the pipeline preserves them as a distinct record format and profiles their behavior separately.
 
-Expand the lakehouse to support additional NYC TLC datasets.
+- **Monthly source files are not perfectly bounded by calendar month.** A total of **39 valid trips** have pickup timestamps outside the month indicated by their source file. These trips occur around month boundaries (late-night trips at the end of previous month or early trips at the beginning of the next month), so the pipeline preserves them and records a source-month offset for lineage and analysis.
 
-- [ ] Add Green Taxi data
-- [ ] Add FHV data
-- [ ] Add HVFHV data
-- [ ] Design a unified trip schema
-- [ ] Add cross-service analytics
+- **1.17% of records are quarantined** because they violate data-quality rules, including negative monetary values, invalid passenger counts, timestamp inconsistencies, or pickups outside the project's accepted date range.
+
+- **The dataset contains thousands of anomalous but potentially valid trips**, including zero-distance trips, zero-duration trips, zero fares, zero total amounts, and trips where `total_amount < fare_amount`. Since the TLC documentation does not clearly define these cases as invalid, the pipeline retains them in Silver with warning flags and provides four Gold data variants so their impact on business metrics can be compared.
+
+---
+
+# Architecture
+
+```text
+NYC Taxi Parquet Files
+          │
+          ▼
+┌──────────────────────────┐
+│ Bronze                   │
+│ Raw ingestion            │
+└──────────────────────────┘
+          │
+          ▼
+┌──────────────────────────┐
+│ Silver                   │
+│ Cleaning                 │
+│ Validation               │
+│ Standardization          │
+│ Quarantine               │
+└──────────────────────────┘
+          │
+          ▼
+┌──────────────────────────┐
+│ Gold                     │
+│ Business Metrics         │
+│ KPI Tables               │
+│ Data Quality Tables      │
+└──────────────────────────┘
+          │
+          ├─────────────► DuckDB SQL
+          │
+          └─────────────► Streamlit Dashboard
+```
+
+---
+
+# Project Structure
+
+```text
+configs/
+
+data/
+    raw/
+    warehouse/
+
+pipelines/
+    ingest_bronze.py
+    transform_silver_with_quarantine.py
+    build_gold.py
+
+dashboard/
+
+sql/
+
+notebooks/
+```
+
+---
+
+# Technologies
+
+| Category | Technology |
+|----------|------------|
+| Table Format | Apache Iceberg |
+| Processing | PyArrow |
+| Catalog | PyIceberg + SQLite |
+| SQL | DuckDB |
+| Dashboard | Streamlit |
+| Storage | Local Parquet |
+| Language | Python |
+
+---
+
+# Data Pipeline
+
+## Bronze
+
+- Reads raw NYC Taxi Parquet files
+- Preserves original schema
+- Stores ingestion metadata
+- Fully idempotent
+
+Output
+
+```
+bronze.yellow_trips
+```
+
+---
+
+## Silver
+
+Cleans and validates Bronze data.
+
+Features
+
+- schema normalization
+- timestamp validation
+- amount validation
+- quarantine table
+- data quality flags
+- month-offset lineage
+
+Outputs
+
+```
+silver.yellow_trips
+quarantine.yellow_trips_rejected
+```
+
+---
+
+## Gold
+
+Produces analytical tables for BI and dashboards.
+
+Current Gold layer includes
+
+- Daily KPI
+- Monthly KPI
+- Pickup zones
+- Dropoff zones
+- Zone flows
+- Payment analysis
+- Vendor analysis
+- Payment null profile
+- Data quality summary
+
+All Gold tables are rebuilt from Silver on every execution.
+
+---
+
+# Gold Dimensions
+
+Most monthly Gold tables support two independent analytical dimensions.
+
+## Data Variant
+
+```
+all
+exclude_zero_duration
+exclude_zero_distance
+exclude_both
+```
+
+This allows business metrics to be compared before and after removing zero-value trips without rebuilding Silver.
+
+---
+
+## Month Basis
+
+```
+pickup_month
+source_month
+```
+
+pickup_month
+
+- groups by pickup timestamp
+
+source_month
+
+- groups by original raw file month
+
+This makes month-offset analysis possible while preserving business reporting.
+
+---
+
+# Streamlit Dashboard
+
+The dashboard contains four pages.
+
+## Overview
+
+- Daily trips
+- Revenue
+- Monthly KPI
+- Trend analysis
+
+## Zone Flows
+
+- Pickup statistics
+- Dropoff statistics
+- Origin → Destination flow matrix
+
+## Payment & Vendor
+
+- Payment mix
+- Vendor comparison
+- Payment type 0 analysis
+- Zone flow by payment/vendor
+
+## Data Quality
+
+- Pipeline funnel
+- Rejected rows
+- Warning metrics
+- Zero-value analysis
+- Month-offset analysis
+- Payment type 0 evidence
+
+---
+
+# SQL Analytics
+
+Reusable DuckDB SQL queries are included for every dashboard view.
+
+```
+sql/
+
+daily_metrics.sql
+monthly_kpi.sql
+zone_analysis.sql
+payment_analysis.sql
+vendor_analysis.sql
+data_quality.sql
+payment_null_profile.sql
+```
+
+---
+
+# Running
+
+Install
+
+```bash
+pip install -r requirements.txt
+```
+
+Run pipelines
+
+```bash
+python pipelines/ingest_bronze.py
+
+python pipelines/transform_silver_with_quarantine.py
+
+python pipelines/build_gold.py
+```
+
+Open dashboard
+
+```bash
+streamlit run dashboard/app.py
+```
+
+---
+
+# Engineering Highlights
+
+This project intentionally keeps engineering metrics alongside business metrics.
+
+Examples include
+
+- pipeline funnel
+- quarantine analysis
+- payment type 0 profiling
+- month-offset lineage
+- rejection reasons
+- warning metrics
+- four zero-value analytical variants
+
+These insights demonstrate how raw datasets are investigated rather than blindly aggregated.
+
+---
+
+# Current Dataset
+
+- NYC Yellow Taxi
+- January–March 2026
+- ~11 million trips
+
+---
+
+# Roadmap
+
+## ~~Phase 1 — Minimal Lakehouse~~
+
+- [x] Bronze
+- [x] Silver
+- [x] Gold
+- [x] Iceberg catalog
+- [x] SQL analytics
+- [x] Streamlit dashboard
+- [x] Data-quality dashboard
+- [x] Documentation
+
+---
+
+## Phase 2 — Reliability & Infrastructure
+
+- [ ] Recovery and checkpoints
+- [ ] Improved idempotency
+- [ ] Enhanced monitoring
+- [ ] Query benchmarking
+- [ ] MinIO
+- [ ] Docker Compose
+- [ ] CI/CD
+
+---
+
+## Phase 3 — Lakehouse Expansion
+
+- [ ] Green Taxi
+- [ ] FHV
+- [ ] HVFHV
+- [ ] Cross-dataset Gold
+- [ ] Borough enrichment
+- [ ] Historical trends
+
+---
+
+## Future Ideas
+
+- PySpark pipelines
+- Apache Spark SQL
+- Apache Nessie
+- Airflow
+- Kubernetes
+- AWS S3
+- Streaming ingestion
+- Great Expectations
+- dbt
+- Real-time dashboard
