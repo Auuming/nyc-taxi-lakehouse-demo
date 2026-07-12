@@ -1,5 +1,6 @@
 import re
 import sys
+import tomllib
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
@@ -11,20 +12,21 @@ from pyiceberg.exceptions import NoSuchTableError
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+CONFIG = tomllib.loads((PROJECT_ROOT / "configs" / "lakehouse.toml").read_text())
 
-DATA_DIR = PROJECT_ROOT / "data"
-DEFAULT_WAREHOUSE_DIR = DATA_DIR / "warehouse"
-CATALOG_DB = DATA_DIR / "catalog.db"
+DEFAULT_WAREHOUSE_DIR = PROJECT_ROOT / CONFIG["paths"]["warehouse_dir"]
+CATALOG_DB = PROJECT_ROOT / CONFIG["paths"]["catalog_db"]
+CATALOG_NAME = CONFIG["catalog"]["name"]
 
-BRONZE_TABLE_IDENTIFIER = "bronze.yellow_trips"
-SILVER_TABLE_IDENTIFIER = "silver.yellow_trips"
-QUARANTINE_TABLE_IDENTIFIER = "quarantine.yellow_trips_rejected"
-TRANSFORM_LOG_IDENTIFIER = "metadata.transform_log"
+BRONZE_TABLE_IDENTIFIER = CONFIG["tables"]["bronze"]
+SILVER_TABLE_IDENTIFIER = CONFIG["tables"]["silver"]
+QUARANTINE_TABLE_IDENTIFIER = CONFIG["tables"]["quarantine"]
+TRANSFORM_LOG_IDENTIFIER = CONFIG["tables"]["transform_log"]
 
-GOLD_NAMESPACE = "gold"
-GOLD_LOG_NAMESPACE = "metadata"
-GOLD_LOG_IDENTIFIER = f"{GOLD_LOG_NAMESPACE}.gold_transform_log"
-GOLD_LOG_LOCATION = DEFAULT_WAREHOUSE_DIR / GOLD_LOG_NAMESPACE / "gold_transform_log"
+GOLD_NAMESPACE = CONFIG["tables"]["gold_namespace"]
+GOLD_LOG_IDENTIFIER = CONFIG["tables"]["gold_transform_log"]
+GOLD_LOG_NAMESPACE, _GOLD_LOG_NAME = GOLD_LOG_IDENTIFIER.split(".", 1)
+GOLD_LOG_LOCATION = DEFAULT_WAREHOUSE_DIR / GOLD_LOG_NAMESPACE / _GOLD_LOG_NAME
 
 SOURCE_MONTH_PATTERN = re.compile(r"_(\d{4}-\d{2})\.parquet$")
 
@@ -166,7 +168,7 @@ def build_all_month_bases(silver: pa.Table, builder: Callable[[pa.Table, str, st
 
 def get_catalog() -> SqlCatalog:
     return SqlCatalog(
-        "local",
+        CATALOG_NAME,
         uri=f"sqlite:///{CATALOG_DB.resolve()}",
         warehouse=DEFAULT_WAREHOUSE_DIR.resolve().as_uri(),
     )
@@ -1001,6 +1003,17 @@ def build_data_quality_summary(silver: pa.Table, quarantine: pa.Table, bronze_ro
     )
 
 
+def comparable_schema(schema: pa.Schema) -> pa.Schema:
+    return pa.schema(
+        [
+            field.with_type(pa.string())
+            if pa.types.is_large_string(field.type)
+            else field
+            for field in schema
+        ]
+    )
+
+
 def ensure_gold_table(catalog: SqlCatalog, identifier: str, schema: pa.Schema):
     catalog.create_namespace_if_not_exists(GOLD_NAMESPACE)
     try:
@@ -1017,7 +1030,7 @@ def ensure_gold_table(catalog: SqlCatalog, identifier: str, schema: pa.Schema):
         return table
 
     existing_schema = table.schema().as_arrow()
-    if existing_schema != schema:
+    if comparable_schema(existing_schema) != comparable_schema(schema):
         raise ValueError(
             f"Schema mismatch for existing table {identifier}. "
             "This project is still in development, so drop the old Gold table "

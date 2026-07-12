@@ -1,0 +1,25 @@
+[dataset]
+service = "yellow"
+base_url = "https://d37ci6vzurychx.cloudfront.net/trip-data"
+months = ["2026-01", "2026-02", "2026-03"]
+
+[paths]
+raw_dir = "data/raw/yellow"
+warehouse_dir = "data/warehouse"
+catalog_db = "data/catalog.db"
+
+[catalog]
+name = "local"
+
+[tables]
+bronze = "bronze.yellow_trips"
+silver = "silver.yellow_trips"
+quarantine = "quarantine.yellow_trips_rejected"
+ingestion_log = "metadata.ingestion_log"
+transform_log = "metadata.transform_log"
+gold_transform_log = "metadata.gold_transform_log"
+gold_namespace = "gold"
+
+[silver_rules]
+min_pickup = 2025-12-31T23:00:00
+max_pickup = 2026-04-01T01:00:00

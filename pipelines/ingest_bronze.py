@@ -1,4 +1,5 @@
 import sys
+import tomllib
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -9,23 +10,22 @@ from pyiceberg.exceptions import NoSuchTableError
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+CONFIG = tomllib.loads((PROJECT_ROOT / "configs" / "lakehouse.toml").read_text())
 
-DATA_DIR = PROJECT_ROOT / "data"
-DEFAULT_RAW_DIR = DATA_DIR / "raw"
-DEFAULT_RAW_DIR_YELLOW = DEFAULT_RAW_DIR / "yellow"
+DEFAULT_RAW_DIR_YELLOW = PROJECT_ROOT / CONFIG["paths"]["raw_dir"]
+DEFAULT_WAREHOUSE_DIR = PROJECT_ROOT / CONFIG["paths"]["warehouse_dir"]
+CATALOG_DB = PROJECT_ROOT / CONFIG["paths"]["catalog_db"]
+CATALOG_NAME = CONFIG["catalog"]["name"]
 
-DEFAULT_WAREHOUSE_DIR = DATA_DIR / "warehouse"
-CATALOG_DB = DATA_DIR / "catalog.db"
-
-NAMESPACE = "bronze"
-TABLE_IDENTIFIER_YELLOW = f"{NAMESPACE}.yellow_trips"
-TABLE_LOCATION_YELLOW = DEFAULT_WAREHOUSE_DIR / NAMESPACE / "yellow_trips"
+TABLE_IDENTIFIER_YELLOW = CONFIG["tables"]["bronze"]
+NAMESPACE, _BRONZE_TABLE_NAME = TABLE_IDENTIFIER_YELLOW.split(".", 1)
+TABLE_LOCATION_YELLOW = DEFAULT_WAREHOUSE_DIR / NAMESPACE / _BRONZE_TABLE_NAME
 SOURCE_FILE_COLUMN = "_bronze_source_file"
 INGESTED_AT_COLUMN = "_bronze_ingested_at"
 
-INGESTION_LOG_NAMESPACE = "metadata"
-INGESTION_LOG_IDENTIFIER = f"{INGESTION_LOG_NAMESPACE}.ingestion_log"
-INGESTION_LOG_LOCATION = DEFAULT_WAREHOUSE_DIR / INGESTION_LOG_NAMESPACE / "ingestion_log"
+INGESTION_LOG_IDENTIFIER = CONFIG["tables"]["ingestion_log"]
+INGESTION_LOG_NAMESPACE, _INGESTION_LOG_NAME = INGESTION_LOG_IDENTIFIER.split(".", 1)
+INGESTION_LOG_LOCATION = DEFAULT_WAREHOUSE_DIR / INGESTION_LOG_NAMESPACE / _INGESTION_LOG_NAME
 
 
 def get_catalog() -> SqlCatalog:
@@ -33,7 +33,7 @@ def get_catalog() -> SqlCatalog:
     DEFAULT_WAREHOUSE_DIR.mkdir(parents=True, exist_ok=True)
 
     return SqlCatalog(
-        "local",
+        CATALOG_NAME,
         uri=f"sqlite:///{CATALOG_DB.resolve()}",
         warehouse=DEFAULT_WAREHOUSE_DIR.resolve().as_uri(),
     )

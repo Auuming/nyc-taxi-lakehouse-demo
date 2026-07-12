@@ -1,17 +1,16 @@
 import sys
+import tomllib
 import urllib.request
 from pathlib import Path
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-RAW_DIR_YELLOW = PROJECT_ROOT / "data" / "raw" / "yellow"
+CONFIG = tomllib.loads((PROJECT_ROOT / "configs" / "lakehouse.toml").read_text())
 
-BASE_URL = "https://d37ci6vzurychx.cloudfront.net/trip-data"
-MONTHS = (
-    "2026-01",
-    "2026-02",
-    "2026-03",
-)
+RAW_DIR_YELLOW = PROJECT_ROOT / CONFIG["paths"]["raw_dir"]
+SERVICE = CONFIG["dataset"]["service"]
+BASE_URL = CONFIG["dataset"]["base_url"]
+MONTHS = tuple(CONFIG["dataset"]["months"])
 
 CHUNK_SIZE = 1 << 20  # 1 MiB
 
@@ -41,7 +40,7 @@ def main() -> int:
     skipped = 0
     failed = 0
     for month in MONTHS:
-        filename = f"yellow_tripdata_{month}.parquet"
+        filename = f"{SERVICE}_tripdata_{month}.parquet"
         target = RAW_DIR_YELLOW / filename
         if target.exists():
             skipped += 1

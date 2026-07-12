@@ -1,5 +1,6 @@
 import re
 import sys
+import tomllib
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -11,27 +12,28 @@ from pyiceberg.transforms import MonthTransform
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+CONFIG = tomllib.loads((PROJECT_ROOT / "configs" / "lakehouse.toml").read_text())
 
-DATA_DIR = PROJECT_ROOT / "data"
-DEFAULT_WAREHOUSE_DIR = DATA_DIR / "warehouse"
-CATALOG_DB = DATA_DIR / "catalog.db"
+DEFAULT_WAREHOUSE_DIR = PROJECT_ROOT / CONFIG["paths"]["warehouse_dir"]
+CATALOG_DB = PROJECT_ROOT / CONFIG["paths"]["catalog_db"]
+CATALOG_NAME = CONFIG["catalog"]["name"]
 
-BRONZE_TABLE_IDENTIFIER = "bronze.yellow_trips"
+BRONZE_TABLE_IDENTIFIER = CONFIG["tables"]["bronze"]
 BRONZE_SOURCE_FILE_COLUMN = "_bronze_source_file"
 
-NAMESPACE = "silver"
-TABLE_IDENTIFIER_YELLOW = f"{NAMESPACE}.yellow_trips"
-TABLE_LOCATION_YELLOW = DEFAULT_WAREHOUSE_DIR / NAMESPACE / "yellow_trips"
-QUARANTINE_NAMESPACE = "quarantine"
-REJECTED_TABLE_IDENTIFIER = f"{QUARANTINE_NAMESPACE}.yellow_trips_rejected"
-REJECTED_TABLE_LOCATION = DEFAULT_WAREHOUSE_DIR / QUARANTINE_NAMESPACE / "yellow_trips_rejected"
+TABLE_IDENTIFIER_YELLOW = CONFIG["tables"]["silver"]
+NAMESPACE, _SILVER_TABLE_NAME = TABLE_IDENTIFIER_YELLOW.split(".", 1)
+TABLE_LOCATION_YELLOW = DEFAULT_WAREHOUSE_DIR / NAMESPACE / _SILVER_TABLE_NAME
+REJECTED_TABLE_IDENTIFIER = CONFIG["tables"]["quarantine"]
+QUARANTINE_NAMESPACE, _REJECTED_TABLE_NAME = REJECTED_TABLE_IDENTIFIER.split(".", 1)
+REJECTED_TABLE_LOCATION = DEFAULT_WAREHOUSE_DIR / QUARANTINE_NAMESPACE / _REJECTED_TABLE_NAME
 PROCESSED_AT_COLUMN = "_silver_processed_at"
 REJECTED_AT_COLUMN = "_silver_rejected_at"
 
-INGESTION_LOG_IDENTIFIER = "metadata.ingestion_log"
-TRANSFORM_LOG_NAMESPACE = "metadata"
-TRANSFORM_LOG_IDENTIFIER = f"{TRANSFORM_LOG_NAMESPACE}.transform_log"
-TRANSFORM_LOG_LOCATION = DEFAULT_WAREHOUSE_DIR / TRANSFORM_LOG_NAMESPACE / "transform_log"
+INGESTION_LOG_IDENTIFIER = CONFIG["tables"]["ingestion_log"]
+TRANSFORM_LOG_IDENTIFIER = CONFIG["tables"]["transform_log"]
+TRANSFORM_LOG_NAMESPACE, _TRANSFORM_LOG_NAME = TRANSFORM_LOG_IDENTIFIER.split(".", 1)
+TRANSFORM_LOG_LOCATION = DEFAULT_WAREHOUSE_DIR / TRANSFORM_LOG_NAMESPACE / _TRANSFORM_LOG_NAME
 
 COLUMN_RENAMES = {
     "VendorID": "vendor_id",
@@ -64,14 +66,14 @@ AMOUNT_COLUMNS = (
     + OPTIONAL_AMOUNT_COLUMNS
 )
 
-MIN_PICKUP_DATETIME = datetime(2025, 12, 31, 23, 0, 0)
-MAX_PICKUP_DATETIME = datetime(2026, 4, 1, 1, 0, 0)
+MIN_PICKUP_DATETIME = CONFIG["silver_rules"]["min_pickup"]
+MAX_PICKUP_DATETIME = CONFIG["silver_rules"]["max_pickup"]
 SOURCE_MONTH_PATTERN = re.compile(r"_(\d{4})-(\d{2})\.parquet$")
 
 
 def get_catalog() -> SqlCatalog:
     return SqlCatalog(
-        "local",
+        CATALOG_NAME,
         uri=f"sqlite:///{CATALOG_DB.resolve()}",
         warehouse=DEFAULT_WAREHOUSE_DIR.resolve().as_uri(),
     )
