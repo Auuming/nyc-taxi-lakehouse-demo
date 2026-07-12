@@ -1,6 +1,6 @@
 import re
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pyarrow as pa
@@ -145,15 +145,15 @@ def add_rejection_metadata(
     rejected: pa.Table,
     rejected_mask: pa.ChunkedArray,
     *,
-    timestamps_valid: pa.ChunkedArray,
-    source_month_valid: pa.ChunkedArray,
+    timestamp_order_valid: pa.ChunkedArray,
+    pickup_range_valid: pa.ChunkedArray,
     distance_valid: pa.ChunkedArray,
     amounts_valid: pa.ChunkedArray,
     passengers_valid: pa.ChunkedArray,
 ) -> pa.Table:
     rejection_columns = {
-        "_invalid_timestamp": timestamps_valid,
-        "_invalid_source_month": source_month_valid,
+        "_invalid_timestamp_order": timestamp_order_valid,
+        "_outside_pickup_range": pickup_range_valid,
         "_invalid_distance": distance_valid,
         "_invalid_amount": amounts_valid,
         "_invalid_passenger_count": passengers_valid,
@@ -186,7 +186,7 @@ def clean_batch(
     pickup = batch["pickup_datetime"]
     dropoff = batch["dropoff_datetime"]
 
-    timestamps_valid = pc.fill_null(
+    timestamp_order_valid = pc.fill_null(
         pc.and_(
             pc.greater(dropoff, pickup),
             pc.and_(
@@ -197,16 +197,20 @@ def clean_batch(
         False,
     )
 
-    source_month_start, source_month_end = source_month_bounds(source_file)
-    accepted_source_start = source_month_start - timedelta(hours=1)
-    accepted_source_end = source_month_end + timedelta(hours=1)
-    source_month_valid = pc.fill_null(
+    pickup_range_valid = pc.fill_null(
         pc.and_(
-            pc.greater_equal(pickup, pa.scalar(accepted_source_start, pickup.type)),
-            pc.less(pickup, pa.scalar(accepted_source_end, pickup.type)),
+            pc.greater_equal(pickup, pa.scalar(MIN_PICKUP_DATETIME, pickup.type)),
+            pc.less_equal(pickup, pa.scalar(MAX_PICKUP_DATETIME, pickup.type)),
         ),
         False,
     )
+
+    timestamps_valid = pc.and_(
+        timestamp_order_valid,
+        pickup_range_valid,
+    )
+
+    source_month_start, _ = source_month_bounds(source_file)
 
     distance_valid = pc.fill_null(
         pc.greater_equal(batch["trip_distance"], 0.0),
@@ -229,8 +233,8 @@ def clean_batch(
     )
 
     rule_counts = {
-        "timestamps": count_failures(timestamps_valid, rows_read),
-        "source_month_warning": count_failures(source_month_valid, rows_read),
+        "timestamp_order": count_failures(timestamp_order_valid, rows_read),
+        "pickup_range": count_failures(pickup_range_valid, rows_read),
         "distance": count_failures(distance_valid, rows_read),
         "amounts": count_failures(amounts_valid, rows_read),
         "passengers": count_failures(passengers_valid, rows_read),
@@ -249,29 +253,14 @@ def clean_batch(
     rejected = add_rejection_metadata(
         rejected,
         rejected_mask,
-        timestamps_valid=timestamps_valid,
-        source_month_valid=source_month_valid,
+        timestamp_order_valid=timestamp_order_valid,
+        pickup_range_valid=pickup_range_valid,
         distance_valid=distance_valid,
         amounts_valid=amounts_valid,
         passengers_valid=passengers_valid,
     )
 
     clean = batch.filter(valid_mask)
-    rows_valid = clean.num_rows
-
-    trip_fields_missing = pc.and_(
-        pc.is_null(batch["passenger_count"]),
-        pc.and_(
-            pc.is_null(batch["ratecode_id"]),
-            pc.and_(
-                pc.is_null(batch["congestion_surcharge"]),
-                pc.and_(
-                    pc.is_null(batch["store_and_fwd_flag"]),
-                    pc.is_null(batch["airport_fee"]),
-                ),
-            ),
-        ),
-    )
 
     source_month_number = (source_month_start.year * 12) + source_month_start.month
     pickup_month_number = pc.add(
@@ -295,7 +284,6 @@ def clean_batch(
     )
 
     warning_columns = {
-        "_silver_trip_fields_missing": trip_fields_missing,
         "_silver_zero_distance": pc.equal(batch["trip_distance"], 0.0),
         "_silver_zero_fare": pc.equal(batch["fare_amount"], 0.0),
         "_silver_zero_total": pc.equal(batch["total_amount"], 0.0),
@@ -310,8 +298,6 @@ def clean_batch(
             pa.field(column_name, pa.bool_(), nullable=False),
             pc.fill_null(warning_mask, False).filter(valid_mask),
         )
-
-    clean = clean.group_by(clean.column_names, use_threads=False).aggregate([])
 
     duration_us = pc.cast(pc.subtract(clean["dropoff_datetime"], clean["pickup_datetime"]), pa.int64())
     duration_min = pc.divide(pc.cast(duration_us, pa.float64()), 60_000_000.0)
@@ -340,7 +326,7 @@ def clean_batch(
     stats = {
         "rows_read": rows_read,
         "rows_rejected_invalid": rejected.num_rows,
-        "rows_rejected_duplicate": rows_valid - clean.num_rows,
+        "rows_rejected_duplicate": 0, # found in notebook that there are no duplicate rows in the bronze table
         "rows_written": clean.num_rows,
         "rows_quarantined": rejected.num_rows,
         "rule_counts": rule_counts,
@@ -523,12 +509,13 @@ def main() -> int:
             continue
 
         snapshot_id = None
-        try:
-            silver_table.refresh()
-            snapshot = silver_table.current_snapshot()
-            snapshot_id = snapshot.snapshot_id if snapshot is not None else None
-        except Exception as e:
-            print(f"Silver committed for {source_file}, but snapshot lookup failed: {e}", file=sys.stderr)
+        if silver_table is not None:
+            try:
+                silver_table.refresh()
+                snapshot = silver_table.current_snapshot()
+                snapshot_id = snapshot.snapshot_id if snapshot is not None else None
+            except Exception as e:
+                print(f"Silver committed for {source_file}, but snapshot lookup failed: {e}", file=sys.stderr)
 
         try:
             append_transform_log(
