@@ -43,8 +43,8 @@ COLUMN_RENAMES = {
     "Airport_fee": "airport_fee",
 }
 
-MIN_PICKUP_DATETIME = datetime(2026, 1, 1)
-MAX_PICKUP_DATETIME_UPPER_BOUND = datetime(2026, 4, 1)
+MIN_PICKUP_DATETIME = datetime(2025, 12, 31, 23, 0, 0)
+MAX_PICKUP_DATETIME = datetime(2026, 4, 1, 1, 0, 0)
 SOURCE_MONTH_PATTERN = re.compile(r"_(\d{4})-(\d{2})\.parquet$")
 
 
@@ -189,17 +189,19 @@ def clean_batch(
             pc.greater(dropoff, pickup),
             pc.and_(
                 pc.greater_equal(pickup, pa.scalar(MIN_PICKUP_DATETIME, pickup.type)),
-                pc.less(pickup, pa.scalar(MAX_PICKUP_DATETIME_UPPER_BOUND, pickup.type)),
+                pc.less_equal(pickup, pa.scalar(MAX_PICKUP_DATETIME, pickup.type)),
             ),
         ),
         False,
     )
 
     source_month_start, source_month_end = source_month_bounds(source_file)
+    accepted_source_start = source_month_start - timedelta(hours=1)
+    accepted_source_end = source_month_end + timedelta(hours=1)
     source_month_valid = pc.fill_null(
         pc.and_(
-            pc.greater_equal(pickup, pa.scalar(source_month_start, pickup.type)),
-            pc.less(pickup, pa.scalar(source_month_end, pickup.type)),
+            pc.greater_equal(pickup, pa.scalar(accepted_source_start, pickup.type)),
+            pc.less(pickup, pa.scalar(accepted_source_end, pickup.type)),
         ),
         False,
     )
@@ -268,8 +270,28 @@ def clean_batch(
         ),
     )
 
+    source_month_number = (source_month_start.year * 12) + source_month_start.month
+    pickup_month_number = pc.add(
+        pc.multiply(pc.year(pickup), 12),
+        pc.month(pickup),
+    )
+    source_month_offset = pc.cast(
+        pc.subtract(
+            pickup_month_number,
+            pa.scalar(source_month_number, pickup_month_number.type),
+        ),
+        pa.int32(),
+    )
+    clean = clean.append_column(
+        pa.field(
+            "_silver_source_month_offset",
+            pa.int32(),
+            nullable=False,
+        ),
+        source_month_offset.filter(valid_mask),
+    )
+
     warning_columns = {
-        "_silver_misstored_source_month": pc.invert(source_month_valid),
         "_silver_trip_fields_missing": trip_fields_missing,
         "_silver_zero_distance": pc.equal(batch["trip_distance"], 0.0),
         "_silver_zero_fare": pc.equal(batch["fare_amount"], 0.0),
@@ -534,7 +556,7 @@ def main() -> int:
         breakdown = ", ".join(
             f"{rule}={count:,}" for rule, count in stats["rule_counts"].items()
         )
-        print(f"  rejected by rule (rows can fail several): {breakdown}")
+        print(f"  quality checks (rows can match several): {breakdown}")
 
     if silver_table is None:
         try:
