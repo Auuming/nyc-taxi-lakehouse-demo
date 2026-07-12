@@ -187,7 +187,7 @@ def clean_batch(
     dropoff = batch["dropoff_datetime"]
 
     timestamp_order_valid = pc.fill_null(
-        pc.greater(dropoff, pickup),
+        pc.greater_equal(dropoff, pickup),
         False,
     )
 
