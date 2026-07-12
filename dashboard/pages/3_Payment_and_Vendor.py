@@ -109,6 +109,7 @@ else:
             y="null_percent",
             title="Null percentage for payment type 0 fields",
             labels={"field_name": "Field", "null_percent": "Null percent"},
+            value_is_percent=True,
         ),
         use_container_width=True,
     )

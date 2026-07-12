@@ -94,6 +94,7 @@ with left:
             integer_values=True,
             show_values=True,
             labels={"pickup_location_id": "Pickup location ID", "trip_count": "Trips"},
+            percent_base=float(pickup["trip_count"].sum()),
         ),
         use_container_width=True,
     )
@@ -116,6 +117,7 @@ with right:
             integer_values=True,
             show_values=True,
             labels={"dropoff_location_id": "Drop-off location ID", "trip_count": "Trips"},
+            percent_base=float(dropoff["trip_count"].sum()),
         ),
         use_container_width=True,
     )

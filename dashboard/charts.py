@@ -34,16 +34,53 @@ def bar_chart(
     labels: dict[str, str] | None = None,
     integer_values: bool = False,
     show_values: bool = False,
+    percent_base: float | None = None,
+    value_is_percent: bool = False,
 ):
+    value_column = y if orientation == "v" else x
+    category_column = x if orientation == "v" else y
+
+    data = df.copy()
+    if value_is_percent:
+        # The plotted value already is a percentage; hover shows it as one.
+        data["_hover_percent"] = data[value_column].map(
+            lambda v: "n/a" if pd.isna(v) else f"{v:.2f}%"
+        )
+    else:
+        # Share of the given base, defaulting to the total of the shown bars.
+        base = percent_base if percent_base is not None else data[value_column].sum()
+        data["_hover_percent"] = data[value_column].map(
+            lambda v: f"{(v / base) * 100.0:.2f}%" if base else "n/a"
+        )
+
     fig = px.bar(
-        df,
+        data,
         x=x,
         y=y,
         color=color,
         orientation=orientation,
         title=title,
         labels=labels or {},
+        custom_data=["_hover_percent"],
     )
+
+    category_label = (labels or {}).get(category_column, category_column)
+    value_label = (labels or {}).get(value_column, value_column)
+    category_ref = "%{x}" if orientation == "v" else "%{y}"
+    value_format = ",.0f" if integer_values else ",.2f"
+    value_ref = ("%{y:" if orientation == "v" else "%{x:") + value_format + "}"
+    if value_is_percent:
+        hovertemplate = (
+            f"{category_label}: {category_ref}<br>"
+            f"{value_label}: %{{customdata[0]}}<extra></extra>"
+        )
+    else:
+        hovertemplate = (
+            f"{category_label}: {category_ref}<br>"
+            f"{value_label}: {value_ref}<br>"
+            f"Share: %{{customdata[0]}}<extra></extra>"
+        )
+    fig.update_traces(hovertemplate=hovertemplate)
 
     if orientation == "v":
         fig.update_xaxes(type="category")
@@ -98,8 +135,20 @@ def quality_bar(
     title: str,
     value_column: str = "metric_percent",
 ):
+    data = df.copy()
+    if "metric_percent" in data.columns:
+        data["_hover_percent"] = data["metric_percent"].map(
+            lambda v: "n/a" if pd.isna(v) else f"{v:.2f}%"
+        )
+    else:
+        data["_hover_percent"] = "n/a"
+    rows_column = "metric_value" if "metric_value" in data.columns else value_column
+    data["_hover_rows"] = data[rows_column].map(
+        lambda v: "n/a" if pd.isna(v) else f"{v:,.0f}"
+    )
+
     fig = px.bar(
-        df,
+        data,
         x="metric_name",
         y=value_column,
         title=title,
@@ -109,6 +158,14 @@ def quality_bar(
                 "Percent" if value_column == "metric_percent" else "Rows"
             ),
         },
+        custom_data=["_hover_rows", "_hover_percent"],
+    )
+    fig.update_traces(
+        hovertemplate=(
+            "%{x}<br>"
+            "Rows: %{customdata[0]}<br>"
+            "Percent: %{customdata[1]}<extra></extra>"
+        )
     )
     if value_column == "metric_value":
         fig.update_yaxes(tickformat=",d")

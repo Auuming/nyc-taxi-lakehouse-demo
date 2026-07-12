@@ -121,20 +121,6 @@ st.plotly_chart(
 )
 
 if not file_offset.empty:
-    offset_fig = px.bar(
-        file_offset.sort_values(["source_month", "metric_name"]),
-        x="source_month",
-        y="metric_percent",
-        color="metric_name",
-        barmode="group",
-        title="Month offset by raw source-file month",
-        labels={
-            "source_month": "Raw source-file month",
-            "metric_percent": "Percent",
-            "metric_name": "Offset",
-        },
-    )
-    st.plotly_chart(offset_fig, use_container_width=True)
     st.dataframe(
         file_offset[
             ["source_month", "source_file", "metric_name", "metric_value", "metric_percent"]
@@ -154,7 +140,11 @@ else:
     st.plotly_chart(
         quality_bar(
             payment_zero.rename(
-                columns={"field_name": "metric_name", "null_percent": "metric_percent"}
+                columns={
+                    "field_name": "metric_name",
+                    "null_percent": "metric_percent",
+                    "null_count": "metric_value",
+                }
             ),
             title="Payment type 0 null percentages",
         ),
